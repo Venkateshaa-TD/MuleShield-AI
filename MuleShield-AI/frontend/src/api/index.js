@@ -28,6 +28,7 @@ export const dashboardApi = {
 // ============================================
 
 export const accountsApi = {
+  getList: (params = {}) => api.get('/accounts', { params }),
   getAll: (params = {}) => api.get('/accounts', { params }),
   getById: (id) => api.get(`/accounts/${id}`),
   getRiskAnalysis: (id) => api.get(`/accounts/${id}/risk-analysis`),
@@ -50,8 +51,10 @@ export const transactionsApi = {
 // ============================================
 
 export const alertsApi = {
+  getList: (params = {}) => api.get('/alerts', { params }),
   getAll: (params = {}) => api.get('/alerts', { params }),
   getById: (id) => api.get(`/alerts/${id}`),
+  updateStatus: (id, data) => api.put(`/alerts/${id}/status`, data),
   update: (id, data) => api.put(`/alerts/${id}`, data),
 }
 
@@ -60,6 +63,7 @@ export const alertsApi = {
 // ============================================
 
 export const casesApi = {
+  getList: (params = {}) => api.get('/cases', { params }),
   getAll: (params = {}) => api.get('/cases', { params }),
   getById: (id) => api.get(`/cases/${id}`),
   create: (data) => api.post('/cases', data),
@@ -71,6 +75,12 @@ export const casesApi = {
 // ============================================
 
 export const graphApi = {
+  getFullNetwork: () => api.get('/graph/network'),
+  getAccount: (id) => api.get(`/graph/account/${id}`),
+  getCircularFlows: () => api.get('/graph/circular-flows'),
+  getHubSpokePatterns: () => api.get('/graph/hub-spoke'),
+  getRapidDispersal: () => api.get('/graph/rapid-dispersal'),
+  getDeviceClusters: () => api.get('/graph/device-clusters'),
   getVisualization: (accountIds = null) => {
     const params = accountIds ? { account_ids: accountIds.join(',') } : {}
     return api.get('/graph/visualization', { params })
@@ -84,6 +94,9 @@ export const graphApi = {
 // ============================================
 
 export const reportsApi = {
+  getList: (params = {}) => api.get('/reports', { params }),
+  generate: (accountId) => api.post(`/reports/sar/${accountId}`),
+  download: (reportId) => api.get(`/reports/${reportId}/download`),
   generateSAR: (accountId) => api.post(`/reports/sar/${accountId}`),
 }
 
@@ -92,8 +105,8 @@ export const reportsApi = {
 // ============================================
 
 export const learningApi = {
-  submitFeedback: (data) => api.post('/feedback', data),
-  getWeights: () => api.get('/weights'),
+  submitFeedback: (data) => api.post('/learning/feedback', data),
+  getWeights: () => api.get('/learning/weights'),
 }
 
 // ============================================

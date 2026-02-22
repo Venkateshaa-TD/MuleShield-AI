@@ -4,6 +4,7 @@
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { ReactFlowProvider } from 'reactflow'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
@@ -13,6 +14,7 @@ import AlertDetail from './pages/AlertDetail'
 import NetworkGraph from './pages/NetworkGraph'
 import Cases from './pages/Cases'
 import Reports from './pages/Reports'
+import TransactionStream from './pages/TransactionStream'
 
 function App() {
   return (
@@ -24,10 +26,11 @@ function App() {
         <Route path="/accounts/:id" element={<AccountDetail />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
-        <Route path="/network" element={<NetworkGraph />} />
+        <Route path="/network" element={<ReactFlowProvider><NetworkGraph /></ReactFlowProvider>} />
         <Route path="/cases" element={<Cases />} />
         <Route path="/cases/:id" element={<Cases />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/stream" element={<TransactionStream />} />
       </Routes>
     </Layout>
   )

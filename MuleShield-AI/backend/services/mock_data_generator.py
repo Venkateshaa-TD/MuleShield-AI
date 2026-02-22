@@ -48,6 +48,30 @@ LAST_NAMES = [
     "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores"
 ]
 
+# Cities with coordinates for map visualization (lat, lng)
+CITIES_WITH_COORDS = {
+    "New York": {"country": "US", "lat": 40.7128, "lng": -74.0060},
+    "Los Angeles": {"country": "US", "lat": 34.0522, "lng": -118.2437},
+    "Chicago": {"country": "US", "lat": 41.8781, "lng": -87.6298},
+    "Houston": {"country": "US", "lat": 29.7604, "lng": -95.3698},
+    "Phoenix": {"country": "US", "lat": 33.4484, "lng": -112.0740},
+    "Philadelphia": {"country": "US", "lat": 39.9526, "lng": -75.1652},
+    "San Antonio": {"country": "US", "lat": 29.4241, "lng": -98.4936},
+    "San Diego": {"country": "US", "lat": 32.7157, "lng": -117.1611},
+    "Dallas": {"country": "US", "lat": 32.7767, "lng": -96.7970},
+    "San Jose": {"country": "US", "lat": 37.3382, "lng": -121.8863},
+    "Miami": {"country": "US", "lat": 25.7617, "lng": -80.1918},
+    "Atlanta": {"country": "US", "lat": 33.7490, "lng": -84.3880},
+    "Boston": {"country": "US", "lat": 42.3601, "lng": -71.0589},
+    "Seattle": {"country": "US", "lat": 47.6062, "lng": -122.3321},
+    "Denver": {"country": "US", "lat": 39.7392, "lng": -104.9903},
+    "Portland": {"country": "US", "lat": 45.5152, "lng": -122.6784},
+    "Las Vegas": {"country": "US", "lat": 36.1699, "lng": -115.1398},
+    "Detroit": {"country": "US", "lat": 42.3314, "lng": -83.0458},
+    "Austin": {"country": "US", "lat": 30.2672, "lng": -97.7431},
+    "Newark": {"country": "US", "lat": 40.7357, "lng": -74.1724},
+}
+
 CITIES = [
     ("New York", "US"), ("Los Angeles", "US"), ("Chicago", "US"), ("Houston", "US"),
     ("Phoenix", "US"), ("Philadelphia", "US"), ("San Antonio", "US"), ("San Diego", "US"),
@@ -59,6 +83,13 @@ CITIES = [
 DEVICE_TYPES = ["mobile", "desktop", "tablet"]
 OS_OPTIONS = ["iOS", "Android", "Windows", "macOS", "Linux"]
 BROWSERS = ["Chrome", "Safari", "Firefox", "Edge", "Opera"]
+
+
+def get_city_coordinates(city_name: str) -> dict:
+    """Get coordinates for a city"""
+    if city_name in CITIES_WITH_COORDS:
+        return CITIES_WITH_COORDS[city_name]
+    return {"country": "US", "lat": 39.8283, "lng": -98.5795}  # Default: center of US
 
 
 def generate_uuid() -> str:
@@ -519,16 +550,44 @@ def generate_all_mock_data() -> Dict:
     print("🔄 Generating mock accounts...")
     accounts = generate_accounts(100)
     
-    print("🔄 Creating mule network cluster...")
-    mule_transactions, mule_network_ids = create_mule_network_cluster(accounts, cluster_size=8)
+    print("🔄 Creating mule network clusters...")
+    # Create multiple mule network clusters of different sizes
+    all_mule_transactions = []
+    all_mule_ids = []
     
-    # Add second smaller mule network
-    mule_transactions_2, mule_network_ids_2 = create_mule_network_cluster(
-        [a for a in accounts if a["id"] not in mule_network_ids], 
-        cluster_size=5
-    )
-    mule_transactions.extend(mule_transactions_2)
-    mule_network_ids.extend(mule_network_ids_2)
+    # Cluster 1: Large hub-spoke network (12 nodes)
+    mule_transactions_1, mule_ids_1 = create_mule_network_cluster(accounts, cluster_size=12)
+    all_mule_transactions.extend(mule_transactions_1)
+    all_mule_ids.extend(mule_ids_1)
+    
+    # Cluster 2: Medium network (8 nodes)
+    remaining_accounts_2 = [a for a in accounts if a["id"] not in all_mule_ids]
+    mule_transactions_2, mule_ids_2 = create_mule_network_cluster(remaining_accounts_2, cluster_size=8)
+    all_mule_transactions.extend(mule_transactions_2)
+    all_mule_ids.extend(mule_ids_2)
+    
+    # Cluster 3: Small network (6 nodes)
+    remaining_accounts_3 = [a for a in accounts if a["id"] not in all_mule_ids]
+    mule_transactions_3, mule_ids_3 = create_mule_network_cluster(remaining_accounts_3, cluster_size=6)
+    all_mule_transactions.extend(mule_transactions_3)
+    all_mule_ids.extend(mule_ids_3)
+    
+    # Cluster 4: Small network (5 nodes)
+    remaining_accounts_4 = [a for a in accounts if a["id"] not in all_mule_ids]
+    mule_transactions_4, mule_ids_4 = create_mule_network_cluster(remaining_accounts_4, cluster_size=5)
+    all_mule_transactions.extend(mule_transactions_4)
+    all_mule_ids.extend(mule_ids_4)
+    
+    mule_transactions = all_mule_transactions
+    mule_network_ids = all_mule_ids
+    
+    # Assign cluster IDs to mule accounts
+    print("🔄 Assigning cluster IDs to mule accounts...")
+    for idx, cluster_ids in enumerate([mule_ids_1, mule_ids_2, mule_ids_3, mule_ids_4]):
+        for account_id in cluster_ids:
+            account = next((a for a in accounts if a["id"] == account_id), None)
+            if account:
+                account["cluster_id"] = idx  # Cluster 0, 1, 2, 3
     
     print("🔄 Generating legitimate transactions...")
     legitimate_transactions = generate_legitimate_transactions(accounts, count=200)

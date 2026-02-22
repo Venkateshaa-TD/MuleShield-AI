@@ -14,6 +14,10 @@ import {
   EyeIcon,
   XMarkIcon,
   MagnifyingGlassIcon,
+  EnvelopeIcon,
+  PaperAirplaneIcon,
+  Cog6ToothIcon,
+  DocumentArrowDownIcon,
 } from '@heroicons/react/24/outline'
 
 export default function Reports() {
@@ -28,6 +32,28 @@ export default function Reports() {
   const [selectedAccountId, setSelectedAccountId] = useState(
     searchParams.get('account_id') || ''
   )
+  
+  // Email state
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [emailAccountId, setEmailAccountId] = useState(null)
+  const [emailForm, setEmailForm] = useState({
+    recipients: '',
+    cc: '',
+    message: '',
+    includePdf: true
+  })
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailResult, setEmailResult] = useState(null)
+  
+  // Email config state
+  const [showConfigModal, setShowConfigModal] = useState(false)
+  const [emailConfig, setEmailConfig] = useState({
+    smtp_server: 'smtp.gmail.com',
+    smtp_port: 587,
+    sender_email: '',
+    sender_password: ''
+  })
+  const [configuring, setConfiguring] = useState(false)
 
   useEffect(() => {
     fetchReports()
@@ -61,7 +87,7 @@ export default function Reports() {
 
     setGenerating(true)
     try {
-      const response = await reportsApi.generate(parseInt(selectedAccountId))
+      const response = await reportsApi.generate(selectedAccountId)
       setShowGenerateModal(false)
       setSelectedAccountId('')
       fetchReports()
@@ -91,6 +117,109 @@ export default function Reports() {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Failed to download report:', error)
+    }
+  }
+
+  const handleDownloadPdf = async (accountId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/reports/sar/${accountId}/pdf`)
+      if (!response.ok) {
+        const error = await response.json()
+        alert(error.detail || 'Failed to download PDF')
+        return
+      }
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `SAR-Report-${accountId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download PDF:', error)
+      alert('Failed to download PDF. Make sure the backend is running.')
+    }
+  }
+
+  const openEmailModal = (accountId) => {
+    setEmailAccountId(accountId)
+    setEmailForm({ recipients: '', cc: '', message: '', includePdf: true })
+    setEmailResult(null)
+    setShowEmailModal(true)
+  }
+
+  const handleSendEmail = async () => {
+    if (!emailForm.recipients.trim()) {
+      alert('Please enter at least one recipient email')
+      return
+    }
+
+    setSendingEmail(true)
+    setEmailResult(null)
+
+    try {
+      const recipientEmails = emailForm.recipients.split(',').map(e => e.trim()).filter(Boolean)
+      const ccEmails = emailForm.cc ? emailForm.cc.split(',').map(e => e.trim()).filter(Boolean) : []
+
+      const response = await fetch(`http://localhost:8000/api/reports/sar/${emailAccountId}/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient_emails: recipientEmails,
+          cc_emails: ccEmails.length > 0 ? ccEmails : null,
+          custom_message: emailForm.message || null,
+          include_pdf: emailForm.includePdf
+        })
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        setEmailResult({ success: true, message: result.message })
+        setTimeout(() => {
+          setShowEmailModal(false)
+          setEmailResult(null)
+        }, 2000)
+      } else {
+        setEmailResult({ success: false, message: result.detail || 'Failed to send email' })
+      }
+    } catch (error) {
+      console.error('Failed to send email:', error)
+      setEmailResult({ success: false, message: 'Network error. Please check if the backend is running.' })
+    } finally {
+      setSendingEmail(false)
+    }
+  }
+
+  const handleConfigureEmail = async () => {
+    if (!emailConfig.sender_email || !emailConfig.sender_password) {
+      alert('Please fill in all required fields')
+      return
+    }
+
+    setConfiguring(true)
+    try {
+      const response = await fetch('http://localhost:8000/api/email/configure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailConfig)
+      })
+
+      const result = await response.json()
+      
+      if (result.status === 'configured') {
+        alert('Email configured successfully!')
+        setShowConfigModal(false)
+      } else {
+        alert(`Configuration failed: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('Failed to configure email:', error)
+      alert('Failed to configure email. Please try again.')
+    } finally {
+      setConfiguring(false)
     }
   }
 
@@ -125,13 +254,22 @@ export default function Reports() {
           <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
           <p className="text-gray-600">Generate and manage Suspicious Activity Reports (SARs)</p>
         </div>
-        <button
-          onClick={() => setShowGenerateModal(true)}
-          className="btn btn-primary flex items-center gap-2"
-        >
-          <DocumentTextIcon className="h-5 w-5" />
-          Generate SAR
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowConfigModal(true)}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <Cog6ToothIcon className="h-5 w-5" />
+            Configure Email
+          </button>
+          <button
+            onClick={() => setShowGenerateModal(true)}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <DocumentTextIcon className="h-5 w-5" />
+            Generate SAR
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -209,16 +347,23 @@ export default function Reports() {
                         <button
                           onClick={() => setSelectedReport(report)}
                           className="btn btn-secondary text-sm flex items-center gap-1"
+                          title="View Report"
                         >
                           <EyeIcon className="h-4 w-4" />
-                          View
                         </button>
                         <button
-                          onClick={() => handleDownload(report.id)}
-                          className="btn btn-secondary text-sm flex items-center gap-1"
+                          onClick={() => handleDownloadPdf(report.account_id)}
+                          className="btn btn-secondary text-sm flex items-center gap-1 text-red-600 hover:text-red-700"
+                          title="Download PDF"
                         >
-                          <ArrowDownTrayIcon className="h-4 w-4" />
-                          Download
+                          <DocumentArrowDownIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => openEmailModal(report.account_id)}
+                          className="btn btn-secondary text-sm flex items-center gap-1 text-blue-600 hover:text-blue-700"
+                          title="Send via Email"
+                        >
+                          <EnvelopeIcon className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -454,15 +599,243 @@ export default function Reports() {
                 )}
 
                 {/* Download Button */}
-                <div className="flex justify-end pt-4 border-t">
+                <div className="flex justify-end gap-3 pt-4 border-t">
                   <button
-                    onClick={() => handleDownload(selectedReport.id)}
+                    onClick={() => handleDownloadPdf(selectedReport.account_id)}
+                    className="btn btn-secondary flex items-center gap-2"
+                  >
+                    <DocumentArrowDownIcon className="h-5 w-5" />
+                    Download PDF
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedReport(null)
+                      openEmailModal(selectedReport.account_id)
+                    }}
                     className="btn btn-primary flex items-center gap-2"
                   >
-                    <ArrowDownTrayIcon className="h-5 w-5" />
-                    Download Full Report
+                    <EnvelopeIcon className="h-5 w-5" />
+                    Send via Email
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50"
+              onClick={() => setShowEmailModal(false)}
+            />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <EnvelopeIcon className="h-6 w-6 text-blue-600" />
+                  Send SAR Report via Email
+                </h2>
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Recipients <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="email@example.com, another@example.com"
+                    value={emailForm.recipients}
+                    onChange={(e) => setEmailForm({ ...emailForm, recipients: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Separate multiple emails with commas</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CC (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="cc@example.com"
+                    value={emailForm.cc}
+                    onChange={(e) => setEmailForm({ ...emailForm, cc: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Custom Message (Optional)
+                  </label>
+                  <textarea
+                    placeholder="Add a personal note to the email..."
+                    value={emailForm.message}
+                    onChange={(e) => setEmailForm({ ...emailForm, message: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="includePdf"
+                    checked={emailForm.includePdf}
+                    onChange={(e) => setEmailForm({ ...emailForm, includePdf: e.target.checked })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="includePdf" className="ml-2 text-sm text-gray-700">
+                    Attach PDF report
+                  </label>
+                </div>
+
+                {emailResult && (
+                  <div className={`p-4 rounded-lg ${emailResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                    <p className="font-medium">{emailResult.success ? '✓ Success!' : '✗ Error'}</p>
+                    <p className="text-sm">{emailResult.message}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowEmailModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail || !emailForm.recipients.trim()}
+                  className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
+                >
+                  {sendingEmail ? (
+                    <>
+                      <div className="spinner h-4 w-4" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <PaperAirplaneIcon className="h-5 w-5" />
+                      Send Email
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Configuration Modal */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4">
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50"
+              onClick={() => setShowConfigModal(false)}
+            />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Cog6ToothIcon className="h-6 w-6 text-gray-600" />
+                  Configure Email Settings
+                </h2>
+                <button
+                  onClick={() => setShowConfigModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-blue-800">
+                  <strong>For Gmail:</strong> Use an App Password instead of your regular password.
+                  Go to Google Account → Security → 2-Step Verification → App Passwords
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      SMTP Server
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="smtp.gmail.com"
+                      value={emailConfig.smtp_server}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, smtp_server: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Port
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="587"
+                      value={emailConfig.smtp_port}
+                      onChange={(e) => setEmailConfig({ ...emailConfig, smtp_port: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Sender Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="your-email@gmail.com"
+                    value={emailConfig.sender_email}
+                    onChange={(e) => setEmailConfig({ ...emailConfig, sender_email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    App Password <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Your app password"
+                    value={emailConfig.sender_password}
+                    onChange={(e) => setEmailConfig({ ...emailConfig, sender_password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowConfigModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfigureEmail}
+                  disabled={configuring || !emailConfig.sender_email || !emailConfig.sender_password}
+                  className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
+                >
+                  {configuring ? 'Configuring...' : 'Save Configuration'}
+                </button>
               </div>
             </div>
           </div>

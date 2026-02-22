@@ -15,10 +15,12 @@ import {
   DocumentTextIcon,
   Cog6ToothIcon,
   ShieldCheckIcon,
+  SignalIcon,
 } from '@heroicons/react/24/outline'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+  { name: 'Transaction Stream', href: '/stream', icon: SignalIcon },
   { name: 'Accounts', href: '/accounts', icon: UserGroupIcon },
   { name: 'Alerts', href: '/alerts', icon: ExclamationTriangleIcon },
   { name: 'Network Graph', href: '/network', icon: ShareIcon },

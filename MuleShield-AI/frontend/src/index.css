@@ -1,3 +1,6 @@
+/* Leaflet map styles - must be first */
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,6 +16,19 @@
 body {
   @apply bg-gray-50 text-gray-900;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Leaflet popup styles override */
+.leaflet-popup-content-wrapper {
+  @apply bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-700;
+}
+
+.leaflet-popup-tip {
+  @apply bg-slate-900;
+}
+
+.leaflet-popup-content {
+  margin: 0;
 }
 
 /* Risk badge styles */
