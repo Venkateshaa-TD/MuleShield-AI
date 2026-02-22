@@ -33,10 +33,10 @@ class EmailService:
     
     def __init__(
         self,
-        smtp_server: str = None,
-        smtp_port: int = None,
-        sender_email: str = None,
-        sender_password: str = None
+        smtp_server: str = "smtp.gmail.com",
+        smtp_port: int = 587,
+        sender_email: str = "stratificationcts@gmail.com",
+        sender_password: str = "wohx kmjf hovs ijvs"
     ):
         """
         Initialize email service.
