@@ -4,6 +4,7 @@
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { ReactFlowProvider } from 'reactflow'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
@@ -24,7 +25,7 @@ function App() {
         <Route path="/accounts/:id" element={<AccountDetail />} />
         <Route path="/alerts" element={<Alerts />} />
         <Route path="/alerts/:id" element={<AlertDetail />} />
-        <Route path="/network" element={<NetworkGraph />} />
+        <Route path="/network" element={<ReactFlowProvider><NetworkGraph /></ReactFlowProvider>} />
         <Route path="/cases" element={<Cases />} />
         <Route path="/cases/:id" element={<Cases />} />
         <Route path="/reports" element={<Reports />} />

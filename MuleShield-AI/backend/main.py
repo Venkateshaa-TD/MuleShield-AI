@@ -262,9 +262,12 @@ async def get_recent_activity():
 @app.get("/api/accounts", tags=["Accounts"])
 async def get_accounts(
     risk_category: Optional[str] = Query(None, description="Filter by risk category"),
+    account_type: Optional[str] = Query(None, description="Filter by account type"),
+    mule_suspected: Optional[str] = Query(None, description="Filter by mule status"),
     is_flagged: Optional[bool] = Query(None, description="Filter by flagged status"),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0)
 ):
     """Get list of accounts with optional filters."""
     if not data_store.is_initialized:
@@ -275,16 +278,20 @@ async def get_accounts(
     # Apply filters
     if risk_category:
         accounts = [a for a in accounts if a.get("risk_category") == risk_category]
+    if account_type:
+        accounts = [a for a in accounts if a.get("account_type") == account_type]
+    if mule_suspected:
+        mule_bool = mule_suspected.lower() == 'true'
+        accounts = [a for a in accounts if a.get("mule_suspected") == mule_bool]
     if is_flagged is not None:
         accounts = [a for a in accounts if a.get("is_flagged") == is_flagged]
     
     # Sort by risk
-    accounts = sorted(accounts, key=lambda x: x.get("mule_probability", 0), reverse=True)
+    accounts = sorted(accounts, key=lambda x: x.get("composite_risk_score", 0), reverse=True)
     
-    return {
-        "total": len(accounts),
-        "accounts": accounts[offset:offset + limit]
-    }
+    # Use skip if provided, otherwise use offset
+    pagination_offset = skip if skip > 0 else offset
+    return accounts[pagination_offset:pagination_offset + limit]
 
 @app.get("/api/accounts/{account_id}", tags=["Accounts"])
 async def get_account(account_id: str):
@@ -427,8 +434,10 @@ async def get_transaction(transaction_id: str):
 async def get_alerts(
     status: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    alert_type: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0)
 ):
     """Get list of alerts."""
     if not data_store.is_initialized:
@@ -440,13 +449,16 @@ async def get_alerts(
         alerts = [a for a in alerts if a.get("status") == status]
     if severity:
         alerts = [a for a in alerts if a.get("severity") == severity]
+    if alert_type:
+        alerts = [a for a in alerts if a.get("alert_type") == alert_type]
     
     # Sort by risk score
     alerts = sorted(alerts, key=lambda x: x.get("risk_score", 0), reverse=True)
     
     # Enrich with account info
     enriched_alerts = []
-    for alert in alerts[offset:offset + limit]:
+    pagination_offset = skip if skip > 0 else offset
+    for alert in alerts[pagination_offset:pagination_offset + limit]:
         account = next(
             (a for a in data_store.accounts if a.get("id") == alert.get("account_id")),
             {}
@@ -457,10 +469,7 @@ async def get_alerts(
             "account_number": account.get("account_number")
         })
     
-    return {
-        "total": len(alerts),
-        "alerts": enriched_alerts
-    }
+    return enriched_alerts
 
 @app.get("/api/alerts/{alert_id}", tags=["Alerts"])
 async def get_alert(alert_id: str):
@@ -549,7 +558,10 @@ async def create_case(case_data: CaseCreate):
 @app.get("/api/cases", tags=["Cases"])
 async def get_cases(
     status: Optional[str] = Query(None),
-    limit: int = Query(50, ge=1, le=100)
+    priority: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0)
 ):
     """Get list of cases."""
     if not data_store.is_initialized:
@@ -559,11 +571,14 @@ async def get_cases(
     
     if status:
         cases = [c for c in cases if c.get("status") == status]
+    if priority:
+        cases = [c for c in cases if c.get("priority") == priority]
     
-    return {
-        "total": len(cases),
-        "cases": cases[:limit]
-    }
+    # Sort by created date descending
+    cases = sorted(cases, key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    pagination_offset = skip if skip > 0 else offset
+    return cases[pagination_offset:pagination_offset + limit]
 
 @app.get("/api/cases/{case_id}", tags=["Cases"])
 async def get_case(case_id: str):
@@ -676,9 +691,137 @@ async def get_mule_network():
         "graph_data": graph_data
     }
 
+@app.get("/api/graph/network", tags=["Network Analysis"])
+async def get_full_network():
+    """Get full transaction network visualization data."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    graph_data = data_store.graph_analyzer.get_network_visualization_data()
+    
+    # Enrich nodes with account info
+    for node in graph_data.get("nodes", []):
+        account = next(
+            (a for a in data_store.accounts if a.get("id") == node["id"]),
+            {}
+        )
+        node["name"] = account.get("account_holder_name", "Unknown")
+        node["risk_score"] = account.get("composite_risk_score", 0)
+        node["mule_probability"] = account.get("mule_probability", 0)
+        node["mule_suspected"] = account.get("mule_suspected", False)
+        node["cluster_id"] = account.get("cluster_id")
+    
+    return graph_data
+
+@app.get("/api/graph/account/{account_id}", tags=["Network Analysis"])
+async def get_account_network(account_id: str):
+    """Get network data for a specific account."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    account = next((a for a in data_store.accounts if a.get("id") == account_id), None)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Get centrality scores
+    centrality = data_store.graph_analyzer.get_centrality_scores(account_id)
+    
+    return {
+        "id": account_id,
+        "name": account.get("account_holder_name"),
+        "risk_score": account.get("composite_risk_score"),
+        "mule_probability": account.get("mule_probability"),
+        "centrality_metrics": centrality,
+        "cluster_id": account.get("cluster_id")
+    }
+
+@app.get("/api/graph/circular-flows", tags=["Network Analysis"])
+async def get_circular_flows():
+    """Get detected circular flow patterns."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    patterns = data_store.graph_analyzer.detect_circular_flows()
+    return {
+        "patterns": patterns,
+        "count": len(patterns) if patterns else 0
+    }
+
+@app.get("/api/graph/hub-spoke", tags=["Network Analysis"])
+async def get_hub_spoke_patterns():
+    """Get detected hub-spoke patterns."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    hubs = data_store.graph_analyzer.detect_hub_spoke_patterns()
+    return {
+        "hubs": hubs,
+        "count": len(hubs) if hubs else 0
+    }
+
+@app.get("/api/graph/rapid-dispersal", tags=["Network Analysis"])
+async def get_rapid_dispersal():
+    """Get detected rapid dispersal patterns."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    dispersal = data_store.graph_analyzer.detect_rapid_dispersal(data_store.transactions)
+    return {
+        "dispersal_patterns": dispersal,
+        "count": len(dispersal) if dispersal else 0
+    }
+
+@app.get("/api/graph/device-clusters", tags=["Network Analysis"])
+async def get_device_clusters():
+    """Get device-linked account clusters."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    clusters = data_store.graph_analyzer.detect_device_clusters()
+    return {
+        "clusters": clusters,
+        "count": len(clusters) if clusters else 0
+    }
+
 # ============================================
 # SAR REPORT ENDPOINTS
 # ============================================
+
+@app.get("/api/reports", tags=["Reports"])
+async def get_reports(
+    status: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0)
+):
+    """Get list of generated SAR reports."""
+    if not data_store.is_initialized:
+        raise HTTPException(status_code=503, detail="System not initialized")
+    
+    # Get reports from alerts that have been marked as reported
+    reports = []
+    for alert in data_store.alerts:
+        if alert.get("sar_generated"):
+            account = next((a for a in data_store.accounts if a.get("id") == alert.get("account_id")), {})
+            reports.append({
+                "id": alert.get("id"),
+                "report_reference": f"SAR-{alert.get('id')}",
+                "account_id": alert.get("account_id"),
+                "account_name": account.get("account_holder_name"),
+                "report_type": "SAR",
+                "status": alert.get("sar_status", "draft"),
+                "created_at": alert.get("created_at"),
+                "content": alert.get("sar_content")
+            })
+    
+    if status:
+        reports = [r for r in reports if r.get("status") == status]
+    
+    # Sort by created_at descending
+    reports = sorted(reports, key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    pagination_offset = skip if skip > 0 else offset
+    return reports[pagination_offset:pagination_offset + limit]
 
 @app.post("/api/reports/sar/{account_id}", tags=["Reports"])
 async def generate_sar_report(account_id: str):
