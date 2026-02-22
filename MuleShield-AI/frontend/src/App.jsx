@@ -14,6 +14,7 @@ import AlertDetail from './pages/AlertDetail'
 import NetworkGraph from './pages/NetworkGraph'
 import Cases from './pages/Cases'
 import Reports from './pages/Reports'
+import TransactionStream from './pages/TransactionStream'
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
         <Route path="/cases" element={<Cases />} />
         <Route path="/cases/:id" element={<Cases />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/stream" element={<TransactionStream />} />
       </Routes>
     </Layout>
   )
